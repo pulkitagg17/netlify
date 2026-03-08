@@ -21,12 +21,12 @@ graph TD
         Redis -.->|Poll| SW[Sign-In Mailer]
         
         %% Complex Producer Flow
-        subgraph Flow Producer [Booking Flow]
+        subgraph FlowProducer [Booking Flow]
             direction BT
             GT[Generate Tickets] -->|Resolves| SC[Send Confirmation]
             SC -->|Resolves| CB[Complete Booking]
         end
-        Redis -.->|Poll| Flow Producer
+        Redis -.->|Poll| FlowProducer
     end
 
     %% External
