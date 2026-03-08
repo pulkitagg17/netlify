@@ -1,70 +1,47 @@
-# Notlify
+# Notifly
 
-Event-driven orchestration platform for reliable, ordered background job execution and saga workflows.
+Event-driven backend service for authentication, booking management, and asynchronous email notifications.
 
 ## Architecture
 
-```text
-HTTP Request
-     │
-     ▼
-[ Express Router ] ───▶ (Emit Domain Event: USER_SIGNED_UP)
-     │
-     ▼
-[ Event Router (Queue Consumer) ]
-     │
-     ▼ (Decoupled Dispatch)
-[ BullMQ Redis Queues & Flows ]
-     │
-     ├─▶ [ Job Queue: Welcome ]
-     │
-     └─▶ [ Flow Producer: Booking Confirmation ] ──▶ [ Job: Send Email ] 
-                                                           ▲ (Waits on)
-                                                     [ Job: Gen Ticket ]
-     │
-     ▼
-[ Stateless Workers ] ──▶ (Hydrate State) ──▶ [ PostgreSQL ]
-     │
-     ▼
-[ External APIs ] (e.g. Resend)
+```mermaid
+graph TD
+    Client[Client] -->|REST API| API[Express API]
+    API -->|Read/Write| DB[(PostgreSQL)]
+    API -->|Publish Events| Redis[(Redis)]
+    Redis -->|Consume Events| Workers[BullMQ Workers]
+    Workers -->|Send Mail| Resend[Resend API]
 ```
 
 ## Tech Stack
-
-* Node.js (TypeScript)
-* Express.js 5.x
-* PostgreSQL (Prisma ORM)
-* Redis
-* BullMQ
-* bcrypt & jose (JWT)
+- **Runtime:** Node.js, TypeScript
+- **Framework:** Express.js
+- **Database:** PostgreSQL, Prisma ORM
+- **Queues/Caching:** Redis, BullMQ
+- **Email:** Resend
+- **Security:** bcrypt, express-jwt, jose
 
 ## Key Features
-
-* **Event-Driven Chaining:** Controllers emit events; Routers delegate execution.
-* **Deterministic Workflows:** BullMQ `FlowProducers` enforce strict dependencies between long-running child and parent jobs.
-* **Resilience:** Idempotent workers with exponential backoff for queue failures.
-* **Thin Queues:** Events push minimal identifiers (e.g., `bookingId`); Workers hydrate full state from Postgres to prevent stale properties and reduce Redis memory footprint. 
+- Secure user authentication and JWT validation.
+- Booking management module with payload validation.
+- Asynchronous event-driven architecture.
+- Background job processing for email notifications (welcome, sign-in, booking).
+- Scalable queue management using Redis and BullMQ.
 
 ## Run Locally
-
 ```bash
-cp .env.example .env     # Configure DATABASE_URL, REDIS_HOST etc.
 npm install
-npx prisma migrate dev
-npm run dev              # Terminal 1: API Server
-npm run worker           # Terminal 2: Job Processors
+npm run dev      # Start API server
+npm run worker   # Start background workers
 ```
 
 ## Project Structure
-
 ```text
 src/
-├── api/          # HTTP controllers, route definitions
-├── domains/      # Business logic (Auth, Bookings)
-├── eventRoute/   # Internal event bus dispatcher
-├── events/       # Event schemas
-├── infra/        # Redis & DB Singletons
-├── queues/       # BullMQ configurations
-├── services/     # Third-party integrations
-└── workers/      # Stateless background consumers
+├── api/        # REST routes & controllers
+├── events/     # Event definitions & schemas
+├── infra/      # Redis & Prisma setup
+├── queues/     # BullMQ producers
+├── services/   # Business logic (e.g., mailer)
+└── workers/    # BullMQ consumers
 ```
