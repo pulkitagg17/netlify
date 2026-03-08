@@ -6,42 +6,71 @@ Event-driven backend service for authentication, booking management, and asynchr
 
 ```mermaid
 graph TD
-    Client[Client] -->|REST API| API[Express API]
-    API -->|Read/Write| DB[(PostgreSQL)]
-    API -->|Publish Events| Redis[(Redis)]
-    Redis -->|Consume Events| Workers[BullMQ Workers]
-    Workers -->|Send Mail| Resend[Resend API]
+    %% API & Storage
+    C[Client Request] -->|REST Payload| API[Express API]
+    API -->|Mutate State| DB[(PostgreSQL)]
+    
+    %% Event Brokerage
+    API -->|Emit Domain Event| Router{Event Router}
+    Router -->|Enqueue Job| Redis[(Redis Broker)]
+    
+    %% Async Workers
+    subgraph BullMQ Worker Nodes
+        direction TB
+        Redis -.->|Poll| WW[Welcome Mailer]
+        Redis -.->|Poll| SW[Sign-In Mailer]
+        
+        %% Complex Producer Flow
+        subgraph Flow Producer [Booking Flow]
+            direction BT
+            GT[Generate Tickets] -->|Resolves| SC[Send Confirmation]
+            SC -->|Resolves| CB[Complete Booking]
+        end
+        Redis -.->|Poll| Flow Producer
+    end
+
+    %% External
+    WW & SW & SC -->|SMTP Trigger| Resend[Resend API]
+
+    classDef storage fill:#f9f8f6,stroke:#333,stroke-width:1px;
+    classDef worker fill:#f0f9ff,stroke:#0288d1,stroke-width:1px;
+    classDef core fill:#f4fbf4,stroke:#2e7d32,stroke-width:1px;
+    
+    class DB,Redis storage;
+    class WW,SW,GT,SC,CB worker;
+    class API,Router core;
 ```
 
 ## Tech Stack
-- **Runtime:** Node.js, TypeScript
-- **Framework:** Express.js
-- **Database:** PostgreSQL, Prisma ORM
-- **Queues/Caching:** Redis, BullMQ
-- **Email:** Resend
-- **Security:** bcrypt, express-jwt, jose
+- **API Runtime:** Node.js, TypeScript, Express.js
+- **Persistence:** PostgreSQL, Prisma ORM
+- **Message Broker:** Redis
+- **Queue Engine:** BullMQ (Job Queues & Flow Producers)
+- **Email Gateway:** Resend
+- **Auth Layer:** bcrypt, express-jwt, jose
 
 ## Key Features
-- Secure user authentication and JWT validation.
-- Booking management module with payload validation.
-- Asynchronous event-driven architecture.
-- Background job processing for email notifications (welcome, sign-in, booking).
-- Scalable queue management using Redis and BullMQ.
+- Stateless authentication leveraging JWT validation middleware.
+- Extensively typed booking management module.
+- Event-driven architecture mapped via explicit domain routers.
+- Hierarchical processing via BullMQ FlowProducers (e.g., ticket generation gates confirmation emails).
+- Highly decoupled queue structure horizontally scalable across Redis nodes.
 
 ## Run Locally
 ```bash
 npm install
-npm run dev      # Start API server
-npm run worker   # Start background workers
+npm run dev      # Spin up API server
+npm run worker   # Boot isolated workers
 ```
 
 ## Project Structure
 ```text
 src/
-├── api/        # REST routes & controllers
-├── events/     # Event definitions & schemas
-├── infra/      # Redis & Prisma setup
-├── queues/     # BullMQ producers
-├── services/   # Business logic (e.g., mailer)
-└── workers/    # BullMQ consumers
+├── api/        # REST routes & stateless controllers
+├── eventRoute/ # Domain-specific event routing mapping
+├── events/     # Typed application event schemas
+├── infra/      # Redis cluster & Prisma pool initialization 
+├── queues/     # BullMQ standard production queues
+├── services/   # Isolated core logic implementations
+└── workers/    # BullMQ consumers & FlowProducers
 ```
